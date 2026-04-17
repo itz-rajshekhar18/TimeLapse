@@ -1,0 +1,284 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Pitch Timer</title>
+  <style>
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      --border-radius-lg: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font-sans); }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border-width: 0;
+    }
+  #app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    transition: background 0.8s ease;
+    border-radius: var(--border-radius-lg);
+  }
+  #phase-label {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+    opacity: 0.75;
+    transition: color 0.8s;
+  }
+  #phase-title {
+    font-size: 22px;
+    font-weight: 500;
+    margin-bottom: 2rem;
+    transition: color 0.8s;
+    text-align: center;
+  }
+  #timer-ring {
+    position: relative;
+    width: 220px;
+    height: 220px;
+    margin-bottom: 2rem;
+  }
+  #timer-ring svg { transform: rotate(-90deg); }
+  #ring-bg { stroke: rgba(255,255,255,0.2); }
+  #ring-fill { transition: stroke-dashoffset 1s linear, stroke 0.8s ease; }
+  #time-display {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 52px;
+    font-weight: 500;
+    letter-spacing: -2px;
+    transition: color 0.8s;
+  }
+  #controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .ctrl-btn {
+    padding: 10px 24px;
+    border-radius: 999px;
+    border: 2px solid rgba(255,255,255,0.6);
+    background: rgba(255,255,255,0.2);
+    color: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    font-family: var(--font-sans);
+  }
+  .ctrl-btn:hover { background: rgba(255,255,255,0.35); }
+  .ctrl-btn:active { transform: scale(0.97); }
+  #add-btn {
+    padding: 10px 20px;
+    border-radius: 999px;
+    border: 2px dashed rgba(255,255,255,0.5);
+    background: transparent;
+    color: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s, opacity 0.2s;
+    font-family: var(--font-sans);
+  }
+  #add-btn:hover { background: rgba(255,255,255,0.2); }
+  #add-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+  #add-btn:disabled:hover { background: transparent; }
+  #phase-bar {
+    display: flex;
+    gap: 8px;
+    margin-top: 0.5rem;
+  }
+  .phase-pill {
+    padding: 5px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1.5px solid rgba(255,255,255,0.4);
+    opacity: 0.5;
+    transition: opacity 0.4s, background 0.4s;
+  }
+  .phase-pill.active {
+    opacity: 1;
+    background: rgba(255,255,255,0.3);
+  }
+  #done-msg {
+    display: none;
+    font-size: 18px;
+    font-weight: 500;
+    text-align: center;
+    margin-top: 0.5rem;
+  }
+  </style>
+</head>
+<body>
+<div id="app">
+  <h2 class="sr-only">Project pitch countdown timer with color-coded phases</h2>
+  <div id="phase-label">Pitch Timer</div>
+  <div id="phase-title">Project Pitch</div>
+
+  <div id="timer-ring">
+    <svg width="220" height="220" viewBox="0 0 220 220">
+      <circle id="ring-bg" cx="110" cy="110" r="96" fill="none" stroke-width="10"/>
+      <circle id="ring-fill" cx="110" cy="110" r="96" fill="none" stroke-width="10"
+        stroke-linecap="round"
+        stroke-dasharray="603"
+        stroke-dashoffset="0"
+        stroke="white"/>
+    </svg>
+    <div id="time-display">6:00</div>
+  </div>
+
+  <div id="controls">
+    <button class="ctrl-btn" id="start-btn" onclick="toggleTimer()">Start</button>
+    <button class="ctrl-btn" id="reset-btn" onclick="resetTimer()">Reset</button>
+    <button id="add-btn" onclick="addMinute()">+ 1 min</button>
+  </div>
+
+  <div id="phase-bar">
+    <div class="phase-pill active" id="pill-pitch">Pitch (4 min)</div>
+    <div class="phase-pill" id="pill-qa">Q&amp;A (2 min)</div>
+  </div>
+
+  <div id="done-msg">Time's up!</div>
+</div>
+
+<script>
+const TOTAL = 6 * 60;
+let totalSeconds = TOTAL;
+let remaining = totalSeconds;
+let running = false;
+let interval = null;
+let extraAdded = 0;
+
+const CIRCUMFERENCE = 2 * Math.PI * 96;
+
+const themes = {
+  green:  { bg: '#2d7a3a', text: '#ffffff', ring: '#7ed88f' },
+  yellow: { bg: '#b8930a', text: '#ffffff', ring: '#ffe066' },
+  orange: { bg: '#c25a00', text: '#ffffff', ring: '#ffaa44' },
+  red:    { bg: '#9b2020', text: '#ffffff', ring: '#ff6b6b' },
+};
+
+function getPhase(sec, total) {
+  const mins = sec / 60;
+  const pitchThreshold = (total / 60) - 4;
+  if (sec <= 0) return 'red';
+  if (mins > (total / 60) - 2) return 'green';
+  if (mins > pitchThreshold) return 'yellow';
+  return 'orange';
+}
+
+function applyTheme(phase) {
+  const t = themes[phase];
+  const app = document.getElementById('app');
+  app.style.background = t.bg;
+  app.style.color = t.text;
+  document.getElementById('ring-fill').style.stroke = t.ring;
+  document.getElementById('time-display').style.color = t.text;
+}
+
+function updateDisplay() {
+  const mins = Math.floor(remaining / 60);
+  const secs = remaining % 60;
+  document.getElementById('time-display').textContent =
+    `${mins}:${secs.toString().padStart(2, '0')}`;
+
+  const progress = remaining / totalSeconds;
+  const offset = CIRCUMFERENCE * (1 - progress);
+  document.getElementById('ring-fill').style.strokeDashoffset = offset;
+  document.getElementById('ring-fill').style.strokeDasharray = CIRCUMFERENCE;
+
+  const phase = getPhase(remaining, totalSeconds);
+  applyTheme(phase);
+
+  const pitchMins = (totalSeconds / 60) - 2;
+  const inQA = remaining <= 2 * 60;
+  document.getElementById('phase-title').textContent = inQA ? 'Q & A' : 'Project Pitch';
+  document.getElementById('pill-pitch').classList.toggle('active', !inQA);
+  document.getElementById('pill-qa').classList.toggle('active', inQA);
+
+  document.getElementById('done-msg').style.display = remaining <= 0 ? 'block' : 'none';
+  
+  // Enable +1 min button only when timer is over
+  document.getElementById('add-btn').disabled = remaining > 0;
+}
+
+function toggleTimer() {
+  if (remaining <= 0) return;
+  running = !running;
+  document.getElementById('start-btn').textContent = running ? 'Pause' : 'Resume';
+  if (running) {
+    interval = setInterval(() => {
+      if (remaining > 0) {
+        remaining--;
+        updateDisplay();
+      } else {
+        clearInterval(interval);
+        running = false;
+        document.getElementById('start-btn').textContent = 'Start';
+        document.getElementById('app').style.background = themes.red.bg;
+        document.getElementById('done-msg').style.display = 'block';
+        flashRed();
+      }
+    }, 1000);
+  } else {
+    clearInterval(interval);
+  }
+}
+
+function flashRed() {
+  let count = 0;
+  const flash = setInterval(() => {
+    document.getElementById('app').style.background =
+      count % 2 === 0 ? '#7b1111' : '#c42020';
+    count++;
+    if (count > 5) clearInterval(flash);
+  }, 400);
+}
+
+function resetTimer() {
+  clearInterval(interval);
+  running = false;
+  extraAdded = 0;
+  totalSeconds = TOTAL;
+  remaining = totalSeconds;
+  document.getElementById('start-btn').textContent = 'Start';
+  document.getElementById('done-msg').style.display = 'none';
+  document.getElementById('add-btn').disabled = true;
+  updateDisplay();
+}
+
+function addMinute() {
+  extraAdded++;
+  totalSeconds += 60;
+  remaining += 60;
+  updateDisplay();
+}
+
+updateDisplay();
+</script>
+</body>
+</html>
